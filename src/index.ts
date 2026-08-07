@@ -1,49 +1,20 @@
-import { chromium, type BrowserContext } from "playwright";
 import configJson from "../config.json" with { type: "json" };
-import { openDb, persistListings } from "./db.js";
+import { persistListings } from "./db.js";
 import { loadEnv } from "./env.js";
 import { assignSearch, matchesSearch } from "./filter.js";
 import { deliverReport } from "./notify.js";
 import { fetchAutoScout24 } from "./sites/autoscout24.js";
-import { fetchLaCentrale } from "./sites/lacentrale.js";
-import { fetchLeboncoin } from "./sites/leboncoin.js";
-import { fetchMobileDe } from "./sites/mobilede.js";
 import type { AppConfig, RawListing, SiteId } from "./types.js";
 
 const config = configJson as AppConfig;
 
 loadEnv();
 
-async function openBrowserContext(): Promise<{
-  context: BrowserContext;
-  close: () => Promise<void>;
-}> {
-  const profileDir = process.env.BROWSER_PROFILE_DIR?.trim();
-
-  if (profileDir) {
-    const context = await chromium.launchPersistentContext(profileDir, {
-      headless: false,
-      locale: "fr-FR",
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    });
-    return { context, close: () => context.close() };
+function activeSites(): AppConfig["sites"] {
+  if (process.env.GITHUB_ACTIONS) {
+    return config.sites.filter((site) => site === "autoscout24");
   }
-
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    locale: "fr-FR",
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  });
-
-  return {
-    context,
-    close: async () => {
-      await context.close();
-      await browser.close();
-    },
-  };
+  return config.sites;
 }
 
 async function collectFromBrowserSites(
@@ -54,41 +25,12 @@ async function collectFromBrowserSites(
     (site) => site !== "autoscout24",
   ) as Exclude<SiteId, "autoscout24">[];
 
-  if (browserSites.length === 0) return [];
-
-  const browser = await openBrowserContext();
-  const page = await browser.context.newPage();
-  const collected: RawListing[] = [];
-
-  try {
-    for (const search of searches) {
-      for (const site of browserSites) {
-        try {
-          let batch: RawListing[] = [];
-          if (site === "leboncoin") batch = await fetchLeboncoin(page, search);
-          if (site === "lacentrale") batch = await fetchLaCentrale(page, search);
-          if (site === "mobilede") batch = await fetchMobileDe(page, search);
-
-          const filtered = batch.filter((listing) =>
-            matchesSearch(listing, search, config),
-          );
-          collected.push(...filtered);
-          console.log(
-            `[${site}] ${search.label}: ${filtered.length}/${batch.length} annonce(s)`,
-          );
-        } catch (error) {
-          console.error(
-            `[${site}] ${search.label}:`,
-            error instanceof Error ? error.message : error,
-          );
-        }
-      }
-    }
-  } finally {
-    await browser.close();
+  if (browserSites.length === 0) {
+    return [];
   }
 
-  return collected;
+  const { collectFromBrowserSitesImpl } = await import("./browser-runner.js");
+  return collectFromBrowserSitesImpl(searches, browserSites, config);
 }
 
 async function collectFromAutoScout24(
@@ -131,11 +73,16 @@ async function main(): Promise<void> {
   const runAt = new Date();
   console.log(`Car Hunter — ${runAt.toLocaleString("fr-FR")}`);
 
+  const sites = activeSites();
+  if (process.env.GITHUB_ACTIONS) {
+    console.log("Mode GitHub Actions : AutoScout24 uniquement");
+  }
+
   const raw: RawListing[] = [];
-  if (config.sites.includes("autoscout24")) {
+  if (sites.includes("autoscout24")) {
     raw.push(...(await collectFromAutoScout24(config.searches)));
   }
-  raw.push(...(await collectFromBrowserSites(config.searches, config.sites)));
+  raw.push(...(await collectFromBrowserSites(config.searches, sites)));
 
   const matched = dedupe(raw).flatMap((listing) => {
     const search = assignSearch(listing, config);
@@ -143,10 +90,7 @@ async function main(): Promise<void> {
     return [{ ...listing, searchId: search.id }];
   });
 
-  const db = openDb();
-  const stored = persistListings(db, matched);
-  db.close();
-
+  const stored = persistListings(matched);
   const delivery = await deliverReport(config, stored, runAt);
   const freshCount = stored.filter((listing) => listing.isNew).length;
 

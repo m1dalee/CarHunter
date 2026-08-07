@@ -1,87 +1,56 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
 import type { ListingRecord, RawListing } from "./types.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "car-hunter.db");
+const SEEN_PATH = path.join(DATA_DIR, "seen.json");
 
-export function openDb(): Database.Database {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const db = new Database(DB_PATH);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS seen_listings (
-      site TEXT NOT NULL,
-      external_id TEXT NOT NULL,
-      url TEXT NOT NULL,
-      title TEXT NOT NULL,
-      price INTEGER,
-      location TEXT,
-      mileage INTEGER,
-      year INTEGER,
-      description TEXT,
-      search_id TEXT NOT NULL,
-      first_seen_at TEXT NOT NULL,
-      last_seen_at TEXT NOT NULL,
-      PRIMARY KEY (site, external_id)
-    );
-  `);
-  return db;
+type SeenEntry = RawListing & {
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
+type SeenStore = Record<string, SeenEntry>;
+
+function listingKey(listing: RawListing): string {
+  return `${listing.site}:${listing.externalId}`;
 }
 
-const upsertStmt = `
-  INSERT INTO seen_listings (
-    site, external_id, url, title, price, location, mileage, year,
-    description, search_id, first_seen_at, last_seen_at
-  ) VALUES (
-    @site, @externalId, @url, @title, @price, @location, @mileage, @year,
-    @description, @searchId, @now, @now
-  )
-  ON CONFLICT(site, external_id) DO UPDATE SET
-    url = excluded.url,
-    title = excluded.title,
-    price = excluded.price,
-    location = excluded.location,
-    mileage = excluded.mileage,
-    year = excluded.year,
-    description = excluded.description,
-    search_id = excluded.search_id,
-    last_seen_at = excluded.last_seen_at
-`;
+function loadSeen(): SeenStore {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(SEEN_PATH)) {
+    return {};
+  }
 
-export function persistListings(
-  db: Database.Database,
-  listings: RawListing[],
-): ListingRecord[] {
+  return JSON.parse(fs.readFileSync(SEEN_PATH, "utf8")) as SeenStore;
+}
+
+function saveSeen(seen: SeenStore): void {
+  fs.writeFileSync(SEEN_PATH, JSON.stringify(seen, null, 2));
+}
+
+export function persistListings(listings: RawListing[]): ListingRecord[] {
+  const seen = loadSeen();
   const now = new Date().toISOString();
-  const existsStmt = db.prepare(
-    "SELECT 1 FROM seen_listings WHERE site = ? AND external_id = ?",
-  );
-  const insert = db.prepare(upsertStmt);
   const results: ListingRecord[] = [];
 
   for (const listing of listings) {
-    const existed = existsStmt.get(listing.site, listing.externalId);
-    insert.run({
-      site: listing.site,
-      externalId: listing.externalId,
-      url: listing.url,
-      title: listing.title,
-      price: listing.price,
-      location: listing.location,
-      mileage: listing.mileage,
-      year: listing.year,
-      description: listing.description,
-      searchId: listing.searchId,
-      now,
-    });
+    const key = listingKey(listing);
+    const existed = Boolean(seen[key]);
+
+    seen[key] = {
+      ...listing,
+      firstSeenAt: seen[key]?.firstSeenAt ?? now,
+      lastSeenAt: now,
+    };
 
     results.push({
       ...listing,
-      firstSeenAt: now,
+      firstSeenAt: seen[key].firstSeenAt,
       isNew: !existed,
     });
   }
 
+  saveSeen(seen);
   return results;
 }
