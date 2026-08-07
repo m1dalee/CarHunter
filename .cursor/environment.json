@@ -1,0 +1,5 @@
+{
+  "name": "CarHunter",
+  "user": "ubuntu",
+  "install": "npm ci && npx playwright install --with-deps chromium"
+}
