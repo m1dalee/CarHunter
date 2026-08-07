@@ -4,6 +4,13 @@ import { matchesSearch } from "./filter.js";
 import { fetchLaCentrale } from "./sites/lacentrale.js";
 import { fetchLeboncoin } from "./sites/leboncoin.js";
 import { fetchMobileDe } from "./sites/mobilede.js";
+import { BROWSER_HEADERS } from "./utils.js";
+
+const CHROMIUM_ARGS = [
+  "--disable-blink-features=AutomationControlled",
+  "--no-sandbox",
+  "--disable-dev-shm-usage",
+];
 
 async function openBrowserContext(): Promise<{
   context: BrowserContext;
@@ -15,17 +22,23 @@ async function openBrowserContext(): Promise<{
     const context = await chromium.launchPersistentContext(profileDir, {
       headless: false,
       locale: "fr-FR",
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      userAgent: BROWSER_HEADERS["User-Agent"],
+      args: CHROMIUM_ARGS,
     });
     return { context, close: () => context.close() };
   }
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: CHROMIUM_ARGS,
+  });
   const context = await browser.newContext({
     locale: "fr-FR",
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    userAgent: BROWSER_HEADERS["User-Agent"],
+    extraHTTPHeaders: {
+      "Accept-Language": BROWSER_HEADERS["Accept-Language"],
+    },
+    viewport: { width: 1366, height: 900 },
   });
 
   return {
@@ -62,6 +75,11 @@ export async function collectFromBrowserSitesImpl(
           console.log(
             `[${site}] ${search.label}: ${filtered.length}/${batch.length} annonce(s)`,
           );
+          if (batch.length === 0) {
+            console.log(
+              `[${site}] ${search.label}: page="${await page.title()}" url=${page.url()}`,
+            );
+          }
         } catch (error) {
           console.error(
             `[${site}] ${search.label}:`,
