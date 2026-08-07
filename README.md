@@ -59,7 +59,7 @@ Manuel : **Actions** → **Run workflow**.
 | Site | GitHub Actions |
 |------|----------------|
 | AutoScout24 FR + DE | ✅ |
-| leboncoin / La Centrale / mobile.de | ⚠️ captcha |
+| leboncoin / La Centrale / mobile.de | ✅ (Playwright) |
 
 ## Critères (`config.json`)
 

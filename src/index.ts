@@ -10,13 +10,6 @@ const config = configJson as AppConfig;
 
 loadEnv();
 
-function activeSites(): AppConfig["sites"] {
-  if (process.env.GITHUB_ACTIONS) {
-    return config.sites.filter((site) => site === "autoscout24");
-  }
-  return config.sites;
-}
-
 async function collectFromBrowserSites(
   searches: AppConfig["searches"],
   sites: SiteId[],
@@ -73,10 +66,8 @@ async function main(): Promise<void> {
   const runAt = new Date();
   console.log(`Car Hunter — ${runAt.toLocaleString("fr-FR")}`);
 
-  const sites = activeSites();
-  if (process.env.GITHUB_ACTIONS) {
-    console.log("Mode GitHub Actions : AutoScout24 uniquement");
-  }
+  const sites = config.sites;
+  console.log(`Sites actifs : ${sites.join(", ")}`);
 
   const raw: RawListing[] = [];
   if (sites.includes("autoscout24")) {
