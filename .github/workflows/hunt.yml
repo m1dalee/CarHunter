@@ -1,8 +1,6 @@
 name: Car Hunter
 
 on:
-  push:
-    branches: [main]
   schedule:
     - cron: "0 6 * * *"
     - cron: "0 18 * * *"
@@ -10,7 +8,7 @@ on:
 
 jobs:
   hunt:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, car-hunter]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -20,17 +18,31 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Restore seen-listings database
-        uses: actions/cache@v4
-        with:
-          path: data/seen.json
-          key: car-hunter-seen-v1
+      - name: Restore persistent data
+        shell: pwsh
+        run: |
+          $base = "C:\CarHunter"
+          New-Item -ItemType Directory -Force -Path "$base\data" | Out-Null
+          if (Test-Path "$base\.env") { Copy-Item "$base\.env" .env }
+          if (Test-Path "$base\data\seen.json") {
+            New-Item -ItemType Directory -Force -Path data | Out-Null
+            Copy-Item "$base\data\seen.json" data\seen.json
+          }
 
       - run: npm ci
-      - run: npx playwright install chromium --with-deps
+      - run: npx playwright install chromium
 
       - name: Run car hunt
         run: npm run hunt
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Save persistent data
+        if: always()
+        shell: pwsh
+        run: |
+          $base = "C:\CarHunter"
+          New-Item -ItemType Directory -Force -Path "$base\data" | Out-Null
+          if (Test-Path .env) { Copy-Item .env "$base\.env" -Force }
+          if (Test-Path data\seen.json) { Copy-Item data\seen.json "$base\data\seen.json" -Force }

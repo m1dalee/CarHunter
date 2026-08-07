@@ -19,8 +19,9 @@ async function openBrowserContext(): Promise<{
   const profileDir = process.env.BROWSER_PROFILE_DIR?.trim();
 
   if (profileDir) {
+    const headless = process.env.BROWSER_HEADLESS === "true";
     const context = await chromium.launchPersistentContext(profileDir, {
-      headless: false,
+      headless,
       locale: "fr-FR",
       userAgent: BROWSER_HEADERS["User-Agent"],
       args: CHROMIUM_ARGS,
