@@ -1,0 +1,27 @@
+{
+  "excludeKeywords": [
+    "cabriolet",
+    "cabrio",
+    "convertible",
+    "décapotable",
+    "decapotable",
+    "f83"
+  ],
+  "searches": [
+    {
+      "id": "m140i",
+      "label": "BMW M140i",
+      "maxPrice": 30000,
+      "mustInclude": ["m140i"],
+      "mustExclude": []
+    },
+    {
+      "id": "m4-f82",
+      "label": "BMW M4 F82",
+      "maxPrice": 40000,
+      "mustInclude": ["m4"],
+      "mustExclude": ["f83", "x3", "m40d", "mild-hybrid", "40d xd"]
+    }
+  ],
+  "sites": ["autoscout24", "leboncoin", "lacentrale", "mobilede"]
+}
