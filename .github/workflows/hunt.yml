@@ -2,7 +2,6 @@ name: Car Hunter
 
 on:
   schedule:
-    # 8h et 20h heure de Paris (UTC+2 été)
     - cron: "0 6 * * *"
     - cron: "0 18 * * *"
   workflow_dispatch:
@@ -25,7 +24,6 @@ jobs:
           key: car-hunter-db-v1
 
       - run: npm ci
-      - run: npx playwright install chromium --with-deps
 
       - name: Run car hunt
         run: npm run hunt
