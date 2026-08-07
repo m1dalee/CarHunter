@@ -4,79 +4,123 @@ Alertes **Telegram** pour BMW **M140i** (≤ 30 000 €) et **M4 F82** (≤ 40 0
 
 Tourne sur **ton PC** via un runner GitHub Actions auto-hébergé — IP résidentielle + profil navigateur persistant pour leboncoin, La Centrale et mobile.de.
 
-## Prérequis PC (Windows)
+---
+
+## Tutoriel complet (Windows)
+
+### Étape 1 — Prérequis
+
+Installe si ce n'est pas déjà fait :
 
 - [Node.js 20+](https://nodejs.org/)
 - [Git](https://git-scm.com/)
-- PC **allumé** aux heures planifiées (8h et 20h Paris)
 
-## 1. Secrets Telegram (GitHub)
+Ton PC doit être **allumé** à 8h et 20h (heure de Paris) avec le runner actif.
 
-**Settings** → **Secrets and variables** → **Actions** :
+---
+
+### Étape 2 — Secret Telegram sur GitHub
+
+Va sur **https://github.com/m1dalee/CarHunter** → **Settings** → **Secrets and variables** → **Actions**.
+
+Vérifie que ces secrets existent (sinon crée-les) :
 
 | Secret | Valeur |
 |--------|--------|
 | `TELEGRAM_BOT_TOKEN` | ton token BotFather |
 | `TELEGRAM_CHAT_ID` | `5252735871` |
 
-## 2. Installer le runner sur ton PC
+---
 
-1. Va sur **GitHub** → repo `CarHunter` → **Settings** → **Actions** → **Runners** → **New self-hosted runner**
-2. Choisis **Windows** → **x64**, suis les commandes PowerShell affichées :
+### Étape 3 — Installer le runner GitHub sur ton PC
+
+1. **Settings** → **Actions** → **Runners** → **New self-hosted runner**
+2. Choisis **Windows** / **x64**
+3. Copie-colle les commandes affichées par GitHub. À la fin, ajoute le label `car-hunter` :
 
 ```powershell
-# Exemple (remplace le token par celui affiché sur GitHub)
 mkdir C:\actions-runner
 cd C:\actions-runner
-Invoke-WebRequest -Uri https://github.com/.../actions-runner-win-x64-....zip -OutFile actions-runner-win-x64.zip
-Expand-Archive actions-runner-win-x64.zip -DestinationPath .
-.\config.cmd --url https://github.com/m1dalee/CarHunter --token <TOKEN> --labels car-hunter
+# Télécharge et extrais le zip (commande affichée sur GitHub)
+.\config.cmd --url https://github.com/m1dalee/CarHunter --token <TOKEN_AFFICHE_SUR_GITHUB> --labels car-hunter
 ```
 
-3. **Important** : lance le runner en mode **interactif** (pas en service Windows) pour le premier setup captcha :
+---
+
+### Étape 4 — Créer la config persistante
+
+Ouvre PowerShell et exécute :
 
 ```powershell
-.\run.cmd
+mkdir C:\CarHunter\browser-profile, C:\CarHunter\data -Force
+notepad C:\CarHunter\.env
 ```
 
-> En mode service, Chrome ne peut pas ouvrir de fenêtre. Garde `run.cmd` dans une fenêtre PowerShell ou configure le runner pour démarrer à la connexion Windows.
-
-## 3. Config persistante (`C:\CarHunter`)
-
-Crée le dossier et copie la config :
-
-```powershell
-mkdir C:\CarHunter\browser-profile -Force
-mkdir C:\CarHunter\data -Force
-copy .env.example C:\CarHunter\.env
-# Édite C:\CarHunter\.env avec ton TELEGRAM_BOT_TOKEN
-```
-
-Contenu de `C:\CarHunter\.env` :
+Colle **exactement** ceci dans le fichier (remplace `TON_TOKEN_BOTFATHER` par ton token) :
 
 ```env
-TELEGRAM_BOT_TOKEN=ton_token
+TELEGRAM_BOT_TOKEN=TON_TOKEN_BOTFATHER
 TELEGRAM_CHAT_ID=5252735871
 BROWSER_PROFILE_DIR=C:\CarHunter\browser-profile
 BROWSER_HEADLESS=false
 ```
 
-## 4. Premier run (résoudre les captchas)
+Enregistre et ferme Notepad.
 
-1. Runner allumé (`.\run.cmd`)
-2. **Actions** → **Car Hunter** → **Run workflow**
-3. Une fenêtre Chrome s'ouvre → résous les captchas leboncoin / La Centrale / mobile.de si demandé
-4. Une fois OK, passe en mode automatique :
+> Le token est le même que celui dans **GitHub Secrets** → `TELEGRAM_BOT_TOKEN` (celui que tu as mis lors du setup initial).
+
+---
+
+### Étape 5 — Lancer le runner (mode interactif)
+
+```powershell
+cd C:\actions-runner
+.\run.cmd
+```
+
+**Laisse cette fenêtre PowerShell ouverte.** Ne configure pas le runner en service Windows pour l'instant (Chrome doit pouvoir s'ouvrir).
+
+Tu dois voir : `Listening for Jobs`.
+
+---
+
+### Étape 6 — Premier run + captchas
+
+1. Va sur **https://github.com/m1dalee/CarHunter/actions**
+2. Clique **Car Hunter** → **Run workflow** → **Run workflow**
+3. Une fenêtre **Chrome** s'ouvre sur ton PC
+4. Si leboncoin / La Centrale / mobile.de demandent un captcha → **résous-le**
+5. Attends la fin du job (✅ vert sur GitHub)
+6. Tu dois recevoir un message **Telegram**
+
+---
+
+### Étape 7 — Passer en mode automatique
+
+Une fois les captchas OK, édite le `.env` :
+
+```powershell
+notepad C:\CarHunter\.env
+```
+
+Change la dernière ligne :
 
 ```env
 BROWSER_HEADLESS=true
 ```
 
+Les prochains runs (8h / 20h) tourneront sans fenêtre Chrome.
+
+---
+
 ## Planification
 
-Automatique **2×/jour** (8h et 20h, Paris) — le PC doit être allumé avec le runner actif.
+| Déclencheur | Horaire |
+|-------------|---------|
+| Automatique | 8h et 20h (Paris) |
+| Manuel | **Actions** → **Run workflow** |
 
-Manuel : **Actions** → **Run workflow**.
+---
 
 ## Message Telegram (exemple)
 
@@ -92,6 +136,8 @@ Manuel : **Actions** → **Run workflow**.
 👉 Voir l'annonce
 ```
 
+---
+
 ## Sites
 
 | Site | Runner PC |
@@ -99,17 +145,28 @@ Manuel : **Actions** → **Run workflow**.
 | AutoScout24 FR + DE | ✅ |
 | leboncoin / La Centrale / mobile.de | ✅ (profil persistant) |
 
+---
+
 ## Critères (`config.json`)
 
 - M140i ≤ 30 000 €
 - M4 F82 ≤ 40 000 €, sans cabrio / F83
 - Pas de limite zone / km
 
+---
+
 ## Dépannage
 
 | Problème | Solution |
 |----------|----------|
-| Job en attente | Runner éteint → lance `.\run.cmd` dans `C:\actions-runner` |
-| Pas de fenêtre Chrome | Runner en service → passe en mode interactif (`run.cmd`) |
-| 0 annonce leboncoin | Relance avec `BROWSER_HEADLESS=false`, refais les captchas |
-| Cookies expirés | Même procédure — refaire un run interactif |
+| Job bloqué « Waiting for a runner » | Lance `.\run.cmd` dans `C:\actions-runner` |
+| Pas de fenêtre Chrome | Runner en service → utilise `run.cmd` (interactif) |
+| 0 annonce leboncoin | Remets `BROWSER_HEADLESS=false`, relance, refais les captchas |
+| Cookies expirés | Idem — un run interactif suffit |
+
+---
+
+## Lancer le runner au démarrage Windows (optionnel)
+
+1. `Win + R` → `shell:startup`
+2. Crée un raccourci vers `C:\actions-runner\run.cmd`
