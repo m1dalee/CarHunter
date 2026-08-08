@@ -1,4 +1,4 @@
-import type { Locator, Page } from "playwright";
+import type { Page } from "playwright";
 import type { RawListing, SearchConfig } from "../types.js";
 import {
   absoluteUrl,
@@ -106,74 +106,84 @@ function parseSearchResponse(payload: unknown): LcHit[] {
   return Array.isArray(hits) ? hits : [];
 }
 
-async function readText(locator: Locator): Promise<string | null> {
-  return locator.textContent({ timeout: 3_000 }).catch(() => null);
+type DomCard = {
+  href: string;
+  title: string;
+  version: string;
+  cardText: string;
+};
+
+function isSearchApiUrl(url: string): boolean {
+  return (
+    url.includes("recherche.lacentrale.fr") &&
+    (url.includes("/v3/search") || url.includes("/search"))
+  );
 }
 
 async function scrapeCards(page: Page, search: SearchConfig): Promise<RawListing[]> {
   await page
-    .locator('[data-testid="vehicleCardV2"], [data-testid="searchCard"], article[data-vehicle-id]')
+    .locator(
+      '[data-testid="vehicleCardV2"], [data-testid="searchCard"], article[data-vehicle-id]',
+    )
     .first()
     .waitFor({ state: "visible", timeout: 10_000 })
     .catch(() => undefined);
 
-  const cards = page.locator(
-    '[data-testid="vehicleCardV2"], [data-testid="searchCard"], .searchCard, article[data-vehicle-id]',
-  );
-  const count = await cards.count();
+  const raw = await page.evaluate((): Array<DomCard | null> => {
+    const selector =
+      '[data-testid="vehicleCardV2"], [data-testid="searchCard"], .searchCard, article[data-vehicle-id]';
+    return Array.from(document.querySelectorAll(selector))
+      .slice(0, 25)
+      .map((card) => {
+        const link =
+          card.querySelector<HTMLAnchorElement>('a[href*="annonce"]') ??
+          card.querySelector<HTMLAnchorElement>('a[href*="/auto-"]') ??
+          card.querySelector<HTMLAnchorElement>("a[href]");
+        const href = link?.getAttribute("href")?.trim() ?? "";
+        if (!href || href === "#") return null;
+
+        const title =
+          card
+            .querySelector("h2, h3, [data-testid='vehicleCardV2-title']")
+            ?.textContent?.trim() ?? "";
+        const version =
+          card
+            .querySelector(
+              "[data-testid='vehicleCardV2-version'], [data-testid='vehicleCardV2-subtitle'], .vehicleVersion",
+            )
+            ?.textContent?.trim() ?? "";
+
+        return {
+          href,
+          title,
+          version,
+          cardText: card.textContent ?? "",
+        };
+      });
+  });
+
   const listings: RawListing[] = [];
 
-  for (let index = 0; index < Math.min(count, 25); index++) {
-    try {
-      const card = cards.nth(index);
-      const href = await card.locator("a").first().getAttribute("href");
-      if (!href) continue;
+  for (const item of raw) {
+    if (!item) continue;
 
-      const title =
-        (await readText(
-          card.locator("h2, h3, [data-testid='vehicleCardV2-title']").first(),
-        ))?.trim() ?? "Annonce La Centrale";
-      const version =
-        (
-          await readText(
-            card.locator(
-              "[data-testid='vehicleCardV2-version'], [data-testid='vehicleCardV2-subtitle'], .vehicleVersion",
-            ).first(),
-          )
-        )?.trim() ?? "";
+    const title = item.title || "Annonce La Centrale";
+    let priceText = item.cardText.match(/(\d[\d\s\u00a0.]*)\s*€/)?.[0] ?? "";
+    const mileageText = item.cardText.match(/\d[\d\s\u00a0.]*\s*km/i)?.[0] ?? "";
+    const yearText = item.cardText.match(/\b(19|20)\d{2}\b/)?.[0] ?? "";
 
-      let priceText =
-        (await readText(
-          card.locator("[data-testid='price'], [data-testid*='price' i], .price, .Price").first(),
-        )) ?? "";
-
-      const cardText = (await readText(card)) ?? "";
-      if (!priceText) {
-        priceText = cardText.match(/(\d[\d\s\u00a0.]*)\s*€/)?.[0] ?? "";
-      }
-
-      const mileageText =
-        cardText.match(/\d[\d\s\u00a0.]*\s*km/i)?.[0] ?? "";
-      const yearText = cardText.match(/\b(19|20)\d{2}\b/)?.[0] ?? "";
-
-      listings.push({
-        site: "lacentrale",
-        externalId: href.match(/(\d{5,})/)?.[1] ?? href,
-        url: absoluteUrl("https://www.lacentrale.fr", href),
-        title: [title, version].filter(Boolean).join(" "),
-        price: parsePrice(priceText),
-        location: null,
-        mileage: parseMileage(mileageText),
-        year: parseYear(yearText),
-        description: [title, version].filter(Boolean).join(" | "),
-        searchId: search.id,
-      });
-    } catch (error) {
-      console.error(
-        `[lacentrale] carte ${index + 1}:`,
-        error instanceof Error ? error.message : error,
-      );
-    }
+    listings.push({
+      site: "lacentrale",
+      externalId: item.href.match(/(\d{5,})/)?.[1] ?? item.href,
+      url: absoluteUrl("https://www.lacentrale.fr", item.href),
+      title: [title, item.version].filter(Boolean).join(" "),
+      price: parsePrice(priceText),
+      location: null,
+      mileage: parseMileage(mileageText),
+      year: parseYear(yearText),
+      description: [title, item.version].filter(Boolean).join(" | "),
+      searchId: search.id,
+    });
   }
 
   return listings;
@@ -183,7 +193,7 @@ async function loadSearchPage(page: Page, url: string): Promise<LcHit[]> {
   const hits: LcHit[] = [];
 
   const onResponse = async (response: import("playwright").Response) => {
-    if (!response.url().includes("recherche.lacentrale.fr/v3/search")) return;
+    if (!isSearchApiUrl(response.url())) return;
     if (!response.ok()) return;
     try {
       const batch = parseSearchResponse(await response.json());
@@ -200,9 +210,7 @@ async function loadSearchPage(page: Page, url: string): Promise<LcHit[]> {
   try {
     const apiResponse = page
       .waitForResponse(
-        (response) =>
-          response.url().includes("recherche.lacentrale.fr/v3/search") &&
-          response.ok(),
+        (response) => isSearchApiUrl(response.url()) && response.ok(),
         { timeout: 25_000 },
       )
       .catch(() => null);
@@ -237,6 +245,14 @@ export async function fetchLaCentrale(
       if (fromApi.length > 0) {
         console.log(`[lacentrale] API ${fromApi.length} annonce(s) — ${url}`);
         return fromApi;
+      }
+
+      if (hits.length > 0) {
+        console.log(
+          `[lacentrale] API ${hits.length} hit(s) non mappable(s), fallback DOM — ${url}`,
+        );
+      } else {
+        console.log(`[lacentrale] API vide, fallback DOM — ${url}`);
       }
 
       const fromDom = await scrapeCards(page, search);
