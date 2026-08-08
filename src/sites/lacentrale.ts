@@ -25,22 +25,37 @@ type LcHit = {
   };
 };
 
-function buildSearchUrl(search: SearchConfig): string {
+function buildSearchUrl(
+  search: SearchConfig,
+  modelFilter: string,
+  extra: Record<string, string> = {},
+): string {
   const params = new URLSearchParams({
     priceMax: String(search.maxPrice),
     pageNumber: "1",
     sortBy: "firstOnlineDateDesc",
+    makesModelsCommercialNames: modelFilter,
   });
 
-  if (search.id === "m140i") {
-    params.set("makesModelsCommercialNames", "BMW:M140i");
-  } else {
-    // La Centrale attend BMW::M4 (double deux-points), pas BMW:M4
-    params.set("makesModelsCommercialNames", "BMW::M4");
-    params.set("categories", "COUPE");
+  for (const [key, value] of Object.entries(extra)) {
+    params.set(key, value);
   }
 
   return `https://www.lacentrale.fr/listing?${params}`;
+}
+
+function buildSearchUrls(search: SearchConfig): string[] {
+  if (search.id === "m140i") {
+    return [buildSearchUrl(search, "BMW:M140i")];
+  }
+
+  // La Centrale référence le F82 comme « BMW SERIE 4 F82 M4 », pas « BMW M4 »
+  return [
+    buildSearchUrl(search, "BMW::SERIE 4 F82 M4"),
+    buildSearchUrl(search, "BMW::Série 4 F82 M4"),
+    buildSearchUrl(search, "BMW::SERIE 4"),
+    buildSearchUrl(search, "BMW::M4", { categories: "COUPE" }),
+  ];
 }
 
 function listingUrl(item: NonNullable<LcHit["item"]>): string | null {
@@ -145,10 +160,10 @@ async function scrapeCards(page: Page, search: SearchConfig): Promise<RawListing
   return listings;
 }
 
-export async function fetchLaCentrale(
+async function loadSearchPage(
   page: Page,
-  search: SearchConfig,
-): Promise<RawListing[]> {
+  url: string,
+): Promise<LcHit[]> {
   const hits: LcHit[] = [];
 
   const onResponse = async (response: import("playwright").Response) => {
@@ -173,7 +188,7 @@ export async function fetchLaCentrale(
       )
       .catch(() => null);
 
-    await page.goto(buildSearchUrl(search), {
+    await page.goto(url, {
       waitUntil: "domcontentloaded",
       timeout: 60_000,
     });
@@ -181,16 +196,36 @@ export async function fetchLaCentrale(
     await apiResponse;
     await page.waitForTimeout(2_000);
 
+    return hits;
+  } finally {
+    page.off("response", onResponse);
+  }
+}
+
+export async function fetchLaCentrale(
+  page: Page,
+  search: SearchConfig,
+): Promise<RawListing[]> {
+  const urls = buildSearchUrls(search);
+
+  for (const url of urls) {
+    const hits = await loadSearchPage(page, url);
     const fromApi = hits
       .map((hit) => mapHit(hit, search))
       .filter((item): item is RawListing => item != null);
 
     if (fromApi.length > 0) {
+      console.log(`[lacentrale] URL OK: ${url}`);
       return fromApi;
     }
 
-    return scrapeCards(page, search);
-  } finally {
-    page.off("response", onResponse);
+    const fromDom = await scrapeCards(page, search);
+    if (fromDom.length > 0) {
+      console.log(`[lacentrale] URL OK (DOM): ${url}`);
+      return fromDom;
+    }
   }
+
+  console.log(`[lacentrale] Aucun résultat (${urls.length} URL(s) testées)`);
+  return [];
 }
