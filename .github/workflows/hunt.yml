@@ -60,7 +60,7 @@ jobs:
 
       - name: Install Playwright Chromium
         shell: cmd
-        run: npx playwright install chromium
+        run: npx --yes playwright install chromium
 
       - name: Run car hunt (leboncoin, La Centrale, mobile.de)
         shell: cmd
