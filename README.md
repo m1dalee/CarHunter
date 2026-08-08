@@ -159,11 +159,28 @@ Manuel : **Actions** → **Run workflow**.
 
 | Problème | Solution |
 |----------|----------|
-| Job `hunt-browser` en attente (queued) | Lance `.\run.cmd`, PC allumé |
+| Job `hunt-browser` en attente (queued) | Lance `.\run.cmd` dans `C:\actions-runner`, PC allumé. Sans runner actif, le job reste bloqué des heures. |
+| Ça marche en PowerShell mais pas via Actions | Vérifie que `run.cmd` est ouvert **avant** de lancer le workflow. Le job utilise `scripts/run-hunt-browser.ps1` — même logique que `cd C:\CarHunter-app; npm run hunt`. |
+| Job `hunt-browser` long / annulé | Normal ~5–15 min (leboncoin + La Centrale). Ne pas annuler trop tôt. Regarde les logs GitHub : tu dois voir `>>> npm run hunt`. |
 | Job `hunt-cloud` échoue | Vérifie secrets Telegram sur GitHub |
 | Pas de fenêtre Chrome | Runner en service → refais install avec **Run as service = N** |
+| Hunt échoue avec Chrome ouvert | Ferme Chrome (verrou sur `browser-profile`) puis relance le workflow |
 | 0 annonce leboncoin | `BROWSER_HEADLESS=false`, relance, refais captchas |
 | Mauvais runner / mauvais labels | Suis **Partie A** puis **Partie B** |
+
+### Test manuel vs workflow
+
+Les deux doivent passer par **`C:\CarHunter-app`** :
+
+```powershell
+cd C:\CarHunter-app
+git pull
+Copy-Item C:\CarHunter\.env .env -Force
+$env:HUNT_SITES = "leboncoin,lacentrale"
+npm run hunt
+```
+
+Si ça marche ici mais pas dans Actions → le runner n'était probablement pas actif (`Listening for Jobs` dans `run.cmd`).
 
 ---
 
