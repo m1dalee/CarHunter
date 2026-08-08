@@ -7,7 +7,33 @@ on:
   workflow_dispatch:
 
 jobs:
-  hunt:
+  hunt-cloud:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Restore seen listings (AutoScout24)
+        uses: actions/cache@v4
+        with:
+          path: data/seen.json
+          key: car-hunter-seen-autoscout-v1
+
+      - run: npm ci
+
+      - name: Run car hunt (AutoScout24)
+        run: npm run hunt
+        env:
+          HUNT_SITES: autoscout24
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+  hunt-browser:
     runs-on: [self-hosted, Windows, car-hunter]
     timeout-minutes: 30
     steps:
@@ -32,9 +58,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install chromium
 
-      - name: Run car hunt
+      - name: Run car hunt (leboncoin, La Centrale, mobile.de)
         run: npm run hunt
         env:
+          HUNT_SITES: leboncoin,lacentrale,mobilede
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 

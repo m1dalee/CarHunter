@@ -10,6 +10,14 @@ const config = configJson as AppConfig;
 
 loadEnv();
 
+function activeSites(): SiteId[] {
+  const override = process.env.HUNT_SITES?.trim();
+  if (override) {
+    return override.split(",").map((site) => site.trim()) as SiteId[];
+  }
+  return config.sites;
+}
+
 async function collectFromBrowserSites(
   searches: AppConfig["searches"],
   sites: SiteId[],
@@ -66,7 +74,7 @@ async function main(): Promise<void> {
   const runAt = new Date();
   console.log(`Car Hunter — ${runAt.toLocaleString("fr-FR")}`);
 
-  const sites = config.sites;
+  const sites = activeSites();
   console.log(`Sites actifs : ${sites.join(", ")}`);
 
   const raw: RawListing[] = [];
