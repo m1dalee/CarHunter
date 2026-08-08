@@ -8,27 +8,95 @@ import {
   parseYear,
 } from "../utils.js";
 
+type LcVehicle = {
+  make?: string;
+  model?: string;
+  version?: string;
+  year?: number | string;
+  mileage?: number | string;
+};
+
+type LcHit = {
+  item?: {
+    price?: number | string;
+    classifiedUrl?: string;
+    reference?: string | number;
+    vehicle?: LcVehicle;
+  };
+};
+
 function buildSearchUrl(search: SearchConfig): string {
   const params = new URLSearchParams({
     priceMax: String(search.maxPrice),
     pageNumber: "1",
-    makesModelsCommercialNames:
-      search.id === "m140i" ? "BMW:M140i" : "BMW:M4",
+    sortBy: "firstOnlineDateDesc",
   });
+
+  if (search.id === "m140i") {
+    params.set("makesModelsCommercialNames", "BMW:M140i");
+  } else {
+    // La Centrale attend BMW::M4 (double deux-points), pas BMW:M4
+    params.set("makesModelsCommercialNames", "BMW::M4");
+    params.set("categories", "COUPE");
+  }
+
   return `https://www.lacentrale.fr/listing?${params}`;
 }
 
-export async function fetchLaCentrale(
-  page: Page,
-  search: SearchConfig,
-): Promise<RawListing[]> {
-  await page.goto(buildSearchUrl(search), {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
-  });
-  await dismissCookieBanner(page);
-  await page.waitForTimeout(3_000);
+function listingUrl(item: NonNullable<LcHit["item"]>): string | null {
+  if (item.classifiedUrl) {
+    return absoluteUrl("https://www.lacentrale.fr", item.classifiedUrl);
+  }
 
+  const ref = item.reference ? String(item.reference) : null;
+  if (!ref) return null;
+
+  return `https://www.lacentrale.fr/auto-occasion-annonce-${ref}.html`;
+}
+
+function mapHit(hit: LcHit, search: SearchConfig): RawListing | null {
+  const item = hit.item;
+  if (!item) return null;
+
+  const vehicle = item.vehicle ?? {};
+  const url = listingUrl(item);
+  if (!url) return null;
+
+  const title = [vehicle.make, vehicle.model, vehicle.version]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  const externalId =
+    url.match(/annonce-(\d+)/)?.[1] ??
+    (item.reference ? String(item.reference) : url);
+
+  return {
+    site: "lacentrale",
+    externalId,
+    url,
+    title: title || "Annonce La Centrale",
+    price: parsePrice(item.price),
+    location: null,
+    mileage: parseMileage(
+      typeof vehicle.mileage === "number"
+        ? String(vehicle.mileage)
+        : vehicle.mileage,
+    ),
+    year: parseYear(vehicle.year),
+    description: title,
+    searchId: search.id,
+  };
+}
+
+function parseSearchResponse(payload: unknown): LcHit[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const hits = (payload as { hits?: LcHit[] }).hits;
+  return Array.isArray(hits) ? hits : [];
+}
+
+async function scrapeCards(page: Page, search: SearchConfig): Promise<RawListing[]> {
   const cards = page.locator(
     '[data-testid="vehicleCardV2"], [data-testid="searchCard"], .searchCard, article[data-vehicle-id]',
   );
@@ -42,14 +110,23 @@ export async function fetchLaCentrale(
     if (!href) continue;
 
     const title =
-      (await card.locator("h2, h3, [data-testid='vehicleCardV2-title']").first().textContent())?.trim() ??
-      "Annonce La Centrale";
+      (await card
+        .locator("h2, h3, [data-testid='vehicleCardV2-title']")
+        .first()
+        .textContent())?.trim() ?? "Annonce La Centrale";
     const priceText =
-      (await card.locator("[data-testid='price'], .price, .Price").first().textContent()) ?? "";
+      (await card
+        .locator("[data-testid='price'], .price, .Price")
+        .first()
+        .textContent()) ?? "";
     const mileageText =
-      (await card.locator(":text-matches('km', 'i')").first().textContent()) ?? "";
+      (await card.locator(":text-matches('km', 'i')").first().textContent()) ??
+      "";
     const yearText =
-      (await card.locator(":text-matches('20\\\\d{2}|19\\\\d{2}')").first().textContent()) ?? "";
+      (await card
+        .locator(":text-matches('20\\\\d{2}|19\\\\d{2}')")
+        .first()
+        .textContent()) ?? "";
 
     listings.push({
       site: "lacentrale",
@@ -66,4 +143,54 @@ export async function fetchLaCentrale(
   }
 
   return listings;
+}
+
+export async function fetchLaCentrale(
+  page: Page,
+  search: SearchConfig,
+): Promise<RawListing[]> {
+  const hits: LcHit[] = [];
+
+  const onResponse = async (response: import("playwright").Response) => {
+    if (!response.url().includes("recherche.lacentrale.fr/v3/search")) return;
+    if (!response.ok()) return;
+    try {
+      hits.push(...parseSearchResponse(await response.json()));
+    } catch {
+      // ignore
+    }
+  };
+
+  page.on("response", onResponse);
+
+  try {
+    const apiResponse = page
+      .waitForResponse(
+        (response) =>
+          response.url().includes("recherche.lacentrale.fr/v3/search") &&
+          response.ok(),
+        { timeout: 20_000 },
+      )
+      .catch(() => null);
+
+    await page.goto(buildSearchUrl(search), {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await dismissCookieBanner(page);
+    await apiResponse;
+    await page.waitForTimeout(2_000);
+
+    const fromApi = hits
+      .map((hit) => mapHit(hit, search))
+      .filter((item): item is RawListing => item != null);
+
+    if (fromApi.length > 0) {
+      return fromApi;
+    }
+
+    return scrapeCards(page, search);
+  } finally {
+    page.off("response", onResponse);
+  }
 }
