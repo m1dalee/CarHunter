@@ -23,5 +23,5 @@
       "mustExclude": ["f83", "x3", "m40d", "mild-hybrid", "40d xd"]
     }
   ],
-  "sites": ["autoscout24", "leboncoin", "lacentrale", "mobilede"]
+  "sites": ["autoscout24", "leboncoin", "lacentrale"]
 }
