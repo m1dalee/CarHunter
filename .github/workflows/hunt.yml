@@ -45,4 +45,7 @@ jobs:
           HUNT_SITES: leboncoin,lacentrale
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: ./scripts/run-hunt-browser.ps1
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          & "$env:GITHUB_WORKSPACE\scripts\run-hunt-browser.ps1"
+          if (-not $?) { exit 1 }

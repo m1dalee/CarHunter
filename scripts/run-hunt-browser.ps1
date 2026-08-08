@@ -9,6 +9,26 @@ function Write-Step([string]$Message) {
     Write-Host ">>> $Message"
 }
 
+function Invoke-Npm([string[]]$Arguments) {
+    & npm.cmd @Arguments
+    if (($LASTEXITCODE -ne $null) -and ($LASTEXITCODE -ne 0)) {
+        exit $LASTEXITCODE
+    }
+    if (-not $?) {
+        exit 1
+    }
+}
+
+function Invoke-Npx([string[]]$Arguments) {
+    & npx.cmd @Arguments
+    if (($LASTEXITCODE -ne $null) -and ($LASTEXITCODE -ne 0)) {
+        exit $LASTEXITCODE
+    }
+    if (-not $?) {
+        exit 1
+    }
+}
+
 Write-Step "CarHunter hunt-browser - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 
 if (-not (Test-Path "$base\.env")) {
@@ -17,11 +37,14 @@ if (-not (Test-Path "$base\.env")) {
 
 Write-Step "Sync repo vers $app"
 if (-not (Test-Path "$app\.git")) {
-    git clone https://github.com/m1dalee/CarHunter.git $app
+    & git clone https://github.com/m1dalee/CarHunter.git $app
+    if (-not $?) { exit 1 }
 }
 Set-Location $app
-git fetch origin main
-git reset --hard origin/main
+& git fetch origin main
+if (-not $?) { exit 1 }
+& git reset --hard origin/main
+if (-not $?) { exit 1 }
 Write-Host "Commit: $(git rev-parse --short HEAD)"
 
 Write-Step "Copie config persistante"
@@ -48,8 +71,7 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 
 Write-Step "npm ci"
-npm ci
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Invoke-Npm @("ci")
 
 $playwrightBrowsers = Join-Path $env:LOCALAPPDATA "ms-playwright"
 $hasChromium = $false
@@ -59,8 +81,7 @@ if (Test-Path $playwrightBrowsers) {
 
 if (-not $hasChromium) {
     Write-Step "Installation Playwright Chromium"
-    npx --yes playwright install chromium
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Invoke-Npx @("--yes", "playwright", "install", "chromium")
 } else {
     Write-Host "Playwright Chromium deja installe - skip"
 }
@@ -86,8 +107,7 @@ if (-not $env:HUNT_SITES) {
 }
 
 Write-Step "npm run hunt (HUNT_SITES=$($env:HUNT_SITES))"
-npm run hunt
-$exitCode = $LASTEXITCODE
+Invoke-Npm @("run", "hunt")
 
 Write-Step "Sauvegarde seen.json"
 if (Test-Path data\seen.json) {
@@ -96,5 +116,5 @@ if (Test-Path data\seen.json) {
 }
 
 Write-Host ""
-Write-Host "Termine - code sortie: $exitCode"
-exit $exitCode
+Write-Host "Termine - succes"
+exit 0
