@@ -42,7 +42,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
 
       - name: Restore persistent data
         shell: pwsh
@@ -55,10 +54,16 @@ jobs:
             Copy-Item "$base\data\seen.json" data\seen.json
           }
 
-      - run: npm ci
-      - run: npx playwright install chromium
+      - name: Install dependencies
+        shell: cmd
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        shell: cmd
+        run: npx playwright install chromium
 
       - name: Run car hunt (leboncoin, La Centrale, mobile.de)
+        shell: cmd
         run: npm run hunt
         env:
           HUNT_SITES: leboncoin,lacentrale,mobilede
