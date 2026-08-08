@@ -12,16 +12,26 @@ const CHROMIUM_ARGS = [
   "--disable-dev-shm-usage",
 ];
 
+function browserChannel(): "chrome" | undefined {
+  const channel = process.env.BROWSER_CHANNEL?.trim().toLowerCase();
+  if (channel === "chrome" || channel === "msedge") {
+    return channel;
+  }
+  return process.env.BROWSER_PROFILE_DIR?.trim() ? "chrome" : undefined;
+}
+
 async function openBrowserContext(): Promise<{
   context: BrowserContext;
   close: () => Promise<void>;
 }> {
   const profileDir = process.env.BROWSER_PROFILE_DIR?.trim();
+  const channel = browserChannel();
 
   if (profileDir) {
     const headless = process.env.BROWSER_HEADLESS === "true";
     const context = await chromium.launchPersistentContext(profileDir, {
       headless,
+      channel,
       locale: "fr-FR",
       userAgent: BROWSER_HEADERS["User-Agent"],
       args: CHROMIUM_ARGS,
@@ -31,6 +41,7 @@ async function openBrowserContext(): Promise<{
 
   const browser = await chromium.launch({
     headless: true,
+    channel,
     args: CHROMIUM_ARGS,
   });
   const context = await browser.newContext({
