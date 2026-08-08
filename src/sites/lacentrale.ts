@@ -50,13 +50,8 @@ function buildSearchUrls(search: SearchConfig): string[] {
     return [buildSearchUrl(search, "BMW::SERIE 1", { versions: "140i" })];
   }
 
-  // M4 F82 — en attente du lien exact ; fallbacks ci-dessous
-  return [
-    buildSearchUrl(search, "BMW::SERIE 4 F82 M4"),
-    buildSearchUrl(search, "BMW::Série 4 F82 M4"),
-    buildSearchUrl(search, "BMW::SERIE 4", { versions: "m4" }),
-    buildSearchUrl(search, "BMW::M4", { categories: "COUPE" }),
-  ];
+  // Filtre La Centrale validé : BMW::SERIE 4 + versions=(f82)
+  return [buildSearchUrl(search, "BMW::SERIE 4", { versions: "(f82)" })];
 }
 
 function listingUrl(item: NonNullable<LcHit["item"]>): string | null {
