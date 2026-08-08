@@ -46,21 +46,15 @@ function buildSearchUrl(
 
 function buildSearchUrls(search: SearchConfig): string[] {
   if (search.id === "m140i") {
-    // La Centrale : « BMW SERIE 1 F20/F21 » + version « 3.0 140i … » en détail
-    return [
-      buildSearchUrl(search, "BMW::SERIE 1"),
-      buildSearchUrl(search, "BMW::Série 1"),
-      buildSearchUrl(search, "BMW::SERIE 1 F20"),
-      buildSearchUrl(search, "BMW::SERIE 1 F21"),
-      buildSearchUrl(search, "BMW:M140i"),
-    ];
+    // Filtre La Centrale validé : BMW::SERIE 1 + versions=140i
+    return [buildSearchUrl(search, "BMW::SERIE 1", { versions: "140i" })];
   }
 
-  // La Centrale référence le F82 comme « BMW SERIE 4 F82 M4 », pas « BMW M4 »
+  // M4 F82 — en attente du lien exact ; fallbacks ci-dessous
   return [
     buildSearchUrl(search, "BMW::SERIE 4 F82 M4"),
     buildSearchUrl(search, "BMW::Série 4 F82 M4"),
-    buildSearchUrl(search, "BMW::SERIE 4"),
+    buildSearchUrl(search, "BMW::SERIE 4", { versions: "m4" }),
     buildSearchUrl(search, "BMW::M4", { categories: "COUPE" }),
   ];
 }
@@ -137,13 +131,15 @@ async function scrapeCards(page: Page, search: SearchConfig): Promise<RawListing
         .first()
         .textContent())?.trim() ?? "Annonce La Centrale";
     const version =
-      (await card
-        .locator(
-          "[data-testid='vehicleCardV2-version'], [data-testid='vehicleCardV2-subtitle'], .vehicleVersion",
-        )
-        .first()
-        .textContent()
-        ?.catch(() => null)) ?? "";
+      (
+        await card
+          .locator(
+            "[data-testid='vehicleCardV2-version'], [data-testid='vehicleCardV2-subtitle'], .vehicleVersion",
+          )
+          .first()
+          .textContent()
+          .catch(() => null)
+      )?.trim() ?? "";
     const priceText =
       (await card
         .locator("[data-testid='price'], .price, .Price")
