@@ -1,6 +1,12 @@
 import type { Page } from "playwright";
 import type { RawListing, SearchConfig } from "../types.js";
-import { absoluteUrl, parseMileage, parsePrice, parseYear } from "../utils.js";
+import {
+  absoluteUrl,
+  dismissCookieBanner,
+  parseMileage,
+  parsePrice,
+  parseYear,
+} from "../utils.js";
 
 function buildSearchUrl(search: SearchConfig): string {
   const params = new URLSearchParams({
@@ -20,9 +26,12 @@ export async function fetchLaCentrale(
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
-  await page.waitForTimeout(4_000);
+  await dismissCookieBanner(page);
+  await page.waitForTimeout(3_000);
 
-  const cards = page.locator('[data-testid="vehicleCardV2"], .searchCard, article');
+  const cards = page.locator(
+    '[data-testid="vehicleCardV2"], [data-testid="searchCard"], .searchCard, article[data-vehicle-id]',
+  );
   const count = await cards.count();
   const listings: RawListing[] = [];
 

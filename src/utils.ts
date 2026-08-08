@@ -52,3 +52,23 @@ export function siteLabel(site: string): string {
       return site;
   }
 }
+
+export async function dismissCookieBanner(page: import("playwright").Page): Promise<void> {
+  const labels = [
+    "Tout accepter",
+    "Accepter & Fermer",
+    "Accepter",
+    "Accept all",
+    "Alle akzeptieren",
+    "Continuer sans accepter",
+  ];
+
+  for (const label of labels) {
+    const button = page.getByRole("button", { name: label, exact: false }).first();
+    if (await button.isVisible({ timeout: 800 }).catch(() => false)) {
+      await button.click({ timeout: 2000 }).catch(() => undefined);
+      await page.waitForTimeout(500);
+      return;
+    }
+  }
+}

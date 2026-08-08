@@ -1,6 +1,12 @@
 import type { Page } from "playwright";
 import type { RawListing, SearchConfig } from "../types.js";
-import { absoluteUrl, parseMileage, parsePrice, parseYear } from "../utils.js";
+import {
+  absoluteUrl,
+  dismissCookieBanner,
+  parseMileage,
+  parsePrice,
+  parseYear,
+} from "../utils.js";
 
 function buildSearchUrl(search: SearchConfig): string {
   const slug = search.id === "m140i" ? "bmw-m140i" : "bmw-m4";
@@ -20,7 +26,13 @@ export async function fetchMobileDe(
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
-  await page.waitForTimeout(4_000);
+  await dismissCookieBanner(page);
+  await page.waitForTimeout(3_000);
+
+  const title = await page.title();
+  if (/access denied|zugriff verweigert|accès refusé/i.test(title)) {
+    return [];
+  }
 
   const cards = page.locator('[data-testid="result-listing"], .cBox-body--resultitem, article');
   const count = await cards.count();

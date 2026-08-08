@@ -1,6 +1,12 @@
 import type { Page } from "playwright";
 import type { RawListing, SearchConfig } from "../types.js";
-import { absoluteUrl, parseMileage, parsePrice, parseYear } from "../utils.js";
+import {
+  absoluteUrl,
+  dismissCookieBanner,
+  parseMileage,
+  parsePrice,
+  parseYear,
+} from "../utils.js";
 
 type LbcAd = {
   list_id?: number;
@@ -51,13 +57,19 @@ function mapAd(ad: LbcAd, search: SearchConfig): RawListing | null {
   };
 }
 
+async function readText(
+  locator: import("playwright").Locator,
+): Promise<string | null> {
+  return locator.textContent({ timeout: 3000 }).catch(() => null);
+}
+
 export async function fetchLeboncoin(
   page: Page,
   search: SearchConfig,
 ): Promise<RawListing[]> {
   const ads: LbcAd[] = [];
 
-  page.on("response", async (response) => {
+  const onResponse = async (response: import("playwright").Response) => {
     if (!response.url().includes("api.leboncoin.fr/finder/search")) return;
     try {
       const json = (await response.json()) as { ads?: LbcAd[] };
@@ -65,31 +77,52 @@ export async function fetchLeboncoin(
     } catch {
       // ignore
     }
-  });
+  };
 
-  await page.goto(buildSearchUrl(search), {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
-  });
-  await page.waitForTimeout(4_000);
+  page.on("response", onResponse);
 
-  if (ads.length === 0) {
-    const cards = await page.locator('[data-qa-id="aditem_container"]').all();
-    for (const card of cards.slice(0, 20)) {
-      const title = (await card.locator("p").first().textContent())?.trim() ?? "";
-      const href = await card.locator("a").first().getAttribute("href");
-      const priceText =
-        (await card.locator('[data-qa-id="aditem_price"]').textContent()) ?? "";
-      if (!href) continue;
-      const externalId = href.match(/(\d+)/)?.[1];
-      if (!externalId) continue;
-      ads.push({
-        list_id: Number(externalId),
-        subject: title,
-        url: href,
-        price: [parsePrice(priceText) ?? 0],
-      });
+  try {
+    const apiResponse = page
+      .waitForResponse(
+        (response) =>
+          response.url().includes("api.leboncoin.fr/finder/search") &&
+          response.ok(),
+        { timeout: 20_000 },
+      )
+      .catch(() => null);
+
+    await page.goto(buildSearchUrl(search), {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await dismissCookieBanner(page);
+    await apiResponse;
+    await page.waitForTimeout(2_000);
+
+    if (ads.length === 0) {
+      const cards = await page.locator('[data-qa-id="aditem_container"]').all();
+      for (const card of cards.slice(0, 20)) {
+        const href = await card.locator("a").first().getAttribute("href");
+        if (!href) continue;
+
+        const externalId = href.match(/(\d+)/)?.[1];
+        if (!externalId) continue;
+
+        const title =
+          (await readText(card.locator("p").first()))?.trim() ?? "Annonce leboncoin";
+        const priceText =
+          (await readText(card.locator('[data-qa-id="aditem_price"]'))) ?? "";
+
+        ads.push({
+          list_id: Number(externalId),
+          subject: title,
+          url: href,
+          price: [parsePrice(priceText) ?? 0],
+        });
+      }
     }
+  } finally {
+    page.off("response", onResponse);
   }
 
   return ads
