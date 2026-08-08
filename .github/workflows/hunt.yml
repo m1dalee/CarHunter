@@ -39,17 +39,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Vérifier le runner
-        shell: powershell
-        run: |
-          Write-Host "Runner: $env:RUNNER_NAME"
-          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
-          Write-Host "User: $env:USERNAME"
-          Write-Host "Node: $(node -v 2>&1)"
-          if (-not (Test-Path "C:\CarHunter\.env")) {
-            throw "C:\CarHunter\.env manquant — le workflow ne peut pas tourner sans ce fichier."
-          }
-
       - name: Run car hunt (leboncoin, La Centrale)
         shell: powershell
         env:
