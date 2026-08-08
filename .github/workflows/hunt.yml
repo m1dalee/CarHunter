@@ -37,63 +37,23 @@ jobs:
     runs-on: [self-hosted, Windows, car-hunter]
     timeout-minutes: 30
     steps:
-      - name: Sync CarHunter-app (même dossier que test manuel)
-        shell: pwsh
+      - uses: actions/checkout@v4
+
+      - name: Vérifier le runner
+        shell: powershell
         run: |
-          $app = "C:\CarHunter-app"
-          if (-not (Test-Path "$app\.git")) {
-            git clone https://github.com/m1dalee/CarHunter.git $app
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+          Write-Host "User: $env:USERNAME"
+          Write-Host "Node: $(node -v 2>&1)"
+          if (-not (Test-Path "C:\CarHunter\.env")) {
+            throw "C:\CarHunter\.env manquant — le workflow ne peut pas tourner sans ce fichier."
           }
-          Set-Location $app
-          git fetch origin main
-          git reset --hard origin/main
-
-      - name: Restore persistent data
-        shell: pwsh
-        working-directory: C:\CarHunter-app
-        run: |
-          $base = "C:\CarHunter"
-          if (-not (Test-Path "$base\.env")) {
-            throw "Fichier manquant: C:\CarHunter\.env — crée-le comme en test manuel."
-          }
-          New-Item -ItemType Directory -Force -Path "$base\data" | Out-Null
-          Copy-Item "$base\.env" .env -Force
-          if (Test-Path "$base\data\seen.json") {
-            New-Item -ItemType Directory -Force -Path data | Out-Null
-            Copy-Item "$base\data\seen.json" data\seen.json -Force
-          }
-          Write-Host "Config OK — BROWSER_PROFILE_DIR=$((Get-Content .env | Select-String 'BROWSER_PROFILE_DIR').Line)"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        shell: cmd
-        working-directory: C:\CarHunter-app
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        shell: cmd
-        working-directory: C:\CarHunter-app
-        run: npx --yes playwright install chromium
 
       - name: Run car hunt (leboncoin, La Centrale)
-        shell: cmd
-        working-directory: C:\CarHunter-app
-        run: npm run hunt
+        shell: powershell
         env:
           HUNT_SITES: leboncoin,lacentrale
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-      - name: Save persistent data
-        if: always()
-        shell: pwsh
-        working-directory: C:\CarHunter-app
-        run: |
-          $base = "C:\CarHunter"
-          New-Item -ItemType Directory -Force -Path "$base\data" | Out-Null
-          if (Test-Path data\seen.json) {
-            Copy-Item data\seen.json "$base\data\seen.json" -Force
-          }
+        run: ./scripts/run-hunt-browser.ps1
