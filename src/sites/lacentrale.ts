@@ -46,7 +46,14 @@ function buildSearchUrl(
 
 function buildSearchUrls(search: SearchConfig): string[] {
   if (search.id === "m140i") {
-    return [buildSearchUrl(search, "BMW:M140i")];
+    // La Centrale : « BMW SERIE 1 F20/F21 » + version « 3.0 140i … » en détail
+    return [
+      buildSearchUrl(search, "BMW::SERIE 1"),
+      buildSearchUrl(search, "BMW::Série 1"),
+      buildSearchUrl(search, "BMW::SERIE 1 F20"),
+      buildSearchUrl(search, "BMW::SERIE 1 F21"),
+      buildSearchUrl(search, "BMW:M140i"),
+    ];
   }
 
   // La Centrale référence le F82 comme « BMW SERIE 4 F82 M4 », pas « BMW M4 »
@@ -77,10 +84,10 @@ function mapHit(hit: LcHit, search: SearchConfig): RawListing | null {
   const url = listingUrl(item);
   if (!url) return null;
 
-  const title = [vehicle.make, vehicle.model, vehicle.version]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+  const modelLine = [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim();
+  const version = vehicle.version?.trim() ?? "";
+  const title = [modelLine, version].filter(Boolean).join(" ").trim();
+  const description = [modelLine, version].filter(Boolean).join(" | ");
 
   const externalId =
     url.match(/annonce-(\d+)/)?.[1] ??
@@ -99,7 +106,7 @@ function mapHit(hit: LcHit, search: SearchConfig): RawListing | null {
         : vehicle.mileage,
     ),
     year: parseYear(vehicle.year),
-    description: title,
+    description: description || title,
     searchId: search.id,
   };
 }
@@ -129,6 +136,14 @@ async function scrapeCards(page: Page, search: SearchConfig): Promise<RawListing
         .locator("h2, h3, [data-testid='vehicleCardV2-title']")
         .first()
         .textContent())?.trim() ?? "Annonce La Centrale";
+    const version =
+      (await card
+        .locator(
+          "[data-testid='vehicleCardV2-version'], [data-testid='vehicleCardV2-subtitle'], .vehicleVersion",
+        )
+        .first()
+        .textContent()
+        ?.catch(() => null)) ?? "";
     const priceText =
       (await card
         .locator("[data-testid='price'], .price, .Price")
@@ -147,12 +162,12 @@ async function scrapeCards(page: Page, search: SearchConfig): Promise<RawListing
       site: "lacentrale",
       externalId: href.match(/(\d{5,})/)?.[1] ?? href,
       url: absoluteUrl("https://www.lacentrale.fr", href),
-      title,
+      title: [title, version.trim()].filter(Boolean).join(" "),
       price: parsePrice(priceText),
       location: null,
       mileage: parseMileage(mileageText),
       year: parseYear(yearText),
-      description: title,
+      description: [title, version.trim()].filter(Boolean).join(" | "),
       searchId: search.id,
     });
   }
