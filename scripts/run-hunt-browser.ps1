@@ -1,4 +1,4 @@
-# Même enchaînement que le test manuel PowerShell dans C:\CarHunter-app
+# Meme enchainement que le test manuel PowerShell dans C:\CarHunter-app
 $ErrorActionPreference = "Stop"
 
 $app = "C:\CarHunter-app"
@@ -9,10 +9,10 @@ function Write-Step([string]$Message) {
     Write-Host ">>> $Message"
 }
 
-Write-Step "CarHunter hunt-browser — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Step "CarHunter hunt-browser - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 
 if (-not (Test-Path "$base\.env")) {
-    throw "Fichier manquant: C:\CarHunter\.env — crée-le comme en test manuel."
+    throw "Fichier manquant: C:\CarHunter\.env - cree-le comme en test manuel."
 }
 
 Write-Step "Sync repo vers $app"
@@ -44,7 +44,7 @@ Get-Content .env | ForEach-Object {
 
 Write-Step "Node $(node -v) / npm $(npm -v)"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    throw "Node.js introuvable dans le PATH — installe Node 20+ ou relance run.cmd depuis une session où node fonctionne."
+    throw "Node.js introuvable dans le PATH - installe Node 20+ ou relance run.cmd depuis une session ou node fonctionne."
 }
 
 Write-Step "npm ci"
@@ -62,7 +62,7 @@ if (-not $hasChromium) {
     npx --yes playwright install chromium
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
-    Write-Host "Playwright Chromium déjà installé — skip"
+    Write-Host "Playwright Chromium deja installe - skip"
 }
 
 $profileLine = Get-Content .env | Where-Object { $_ -match "^BROWSER_PROFILE_DIR=" } | Select-Object -First 1
@@ -71,14 +71,14 @@ if ($profileLine) {
     if ($profileDir -and (Test-Path $profileDir)) {
         Write-Host "Profil navigateur: $profileDir"
     } elseif ($profileDir) {
-        Write-Host "ATTENTION: profil navigateur absent, création: $profileDir"
+        Write-Host "ATTENTION: profil navigateur absent, creation: $profileDir"
         New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
     }
 }
 
 $chrome = Get-Process chrome -ErrorAction SilentlyContinue
 if ($chrome) {
-    Write-Host "ATTENTION: Chrome déjà ouvert ($($chrome.Count) processus). Ferme Chrome si le hunt échoue (verrou profil)."
+    Write-Host "ATTENTION: Chrome deja ouvert ($($chrome.Count) processus). Ferme Chrome si le hunt echoue (verrou profil)."
 }
 
 if (-not $env:HUNT_SITES) {
@@ -92,9 +92,9 @@ $exitCode = $LASTEXITCODE
 Write-Step "Sauvegarde seen.json"
 if (Test-Path data\seen.json) {
     Copy-Item data\seen.json "$base\data\seen.json" -Force
-    Write-Host "OK — data\seen.json copié vers C:\CarHunter\data\"
+    Write-Host "OK - data\seen.json copie vers C:\CarHunter\data\"
 }
 
 Write-Host ""
-Write-Host "Terminé — code sortie: $exitCode"
+Write-Host "Termine - code sortie: $exitCode"
 exit $exitCode
